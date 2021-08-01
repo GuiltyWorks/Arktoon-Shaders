@@ -1,4 +1,4 @@
-﻿using UnityEditor;
+using UnityEditor;
 using UnityEngine;
 using System.Collections.Generic;
 using System.Linq;
@@ -23,6 +23,13 @@ namespace ArktoonShaders
         MaterialProperty BumpScale;
         MaterialProperty EmissionMap;
         MaterialProperty EmissionColor;
+        MaterialProperty SubTexture;
+        MaterialProperty FadeStartDepth;
+        MaterialProperty FadeEndDepth;
+        MaterialProperty FadeDepthInvert;
+        MaterialProperty MainTexTime;
+        MaterialProperty TexFadeTime;
+        MaterialProperty SubTexTime;
         MaterialProperty AlphaMask;
         MaterialProperty BaseTextureSecondary;
         MaterialProperty BaseColorSecondary;
@@ -197,7 +204,9 @@ namespace ArktoonShaders
 
             // shader.nameによって調整可能なプロパティを制御する。
             bool isOpaque = shader.name.Contains("Opaque");
-            bool isFade = shader.name.Contains("Fade");
+            bool isFade = shader.name.Contains("Fade") && !shader.name.Contains("DistanceFade") && !shader.name.Contains("TimeFade");
+            bool isDistanceFade = shader.name.Contains("DistanceFade");
+            bool isTimeFade = shader.name.Contains("TimeFade");
             bool isCutout = shader.name.Contains("Cutout");
             bool isStencilWriter = shader.name.Contains("Stencil/Writer") || shader.name.Contains("StencilWriter");
             bool isStencilReader = shader.name.Contains("Stencil/Reader") || shader.name.Contains("StencilReader");
@@ -213,6 +222,13 @@ namespace ArktoonShaders
             BumpScale = FindProperty("_BumpScale", props, false);
             EmissionMap = FindProperty("_EmissionMap", props, false);
             EmissionColor = FindProperty("_EmissionColor", props, false);
+            SubTexture = FindProperty("_SubTex", props, false);
+            FadeStartDepth = FindProperty("_FadeStartDepth", props, false);
+            FadeEndDepth = FindProperty("_FadeEndDepth", props, false);
+            FadeDepthInvert = FindProperty("_FadeDepthInvert", props, false);
+            MainTexTime = FindProperty("_MainTexTime", props, false);
+            TexFadeTime = FindProperty("_TexFadeTime", props, false);
+            SubTexTime = FindProperty("_SubTexTime", props, false);
             AlphaMask = FindProperty("_AlphaMask", props, false);
             BaseTextureSecondary = FindProperty("_MainTexSecondary", props, false);
             BaseColorSecondary = FindProperty("_ColorSecondary", props, false);
@@ -411,6 +427,41 @@ namespace ArktoonShaders
                         if(isFade) materialEditor.ShaderProperty(ZWrite, "ZWrite");
                     });
                 });
+
+                // Distance Fade
+                if(isDistanceFade) {
+                    UIHelper.ShurikenHeader("Distance Fade");
+                    UIHelper.DrawWithGroup(() => {
+                        UIHelper.DrawWithGroup(() => {
+                            materialEditor.ShaderProperty(SubTexture, "Sub Texture");
+                        });
+
+                        UIHelper.DrawWithGroup(() => {
+                            materialEditor.ShaderProperty(FadeStartDepth, "Fade Start Depth");
+                            materialEditor.ShaderProperty(FadeEndDepth, "Fade End Depth");
+                        });
+
+                        UIHelper.DrawWithGroup(() => {
+                            materialEditor.ShaderProperty(FadeDepthInvert, "Invert Fade Depth");
+                        });
+                    });
+                }
+
+                // Time Fade
+                if(isTimeFade) {
+                    UIHelper.ShurikenHeader("Time Fade");
+                    UIHelper.DrawWithGroup(() => {
+                        UIHelper.DrawWithGroup(() => {
+                            materialEditor.ShaderProperty(SubTexture, "Sub Texture");
+                        });
+
+                        UIHelper.DrawWithGroup(() => {
+                            materialEditor.ShaderProperty(MainTexTime, "Main Texture Time");
+                            materialEditor.ShaderProperty(TexFadeTime, "Fade Time");
+                            materialEditor.ShaderProperty(SubTexTime, "Sub Texture Time");
+                        });
+                    });
+                }
 
                 // Secondary Common
                 if(isStencilReaderDouble) {
