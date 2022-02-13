@@ -256,7 +256,7 @@ Material:
     - _UseShadowCap: 0
     - _UseVertexLight: 1
     - _UsfasseOutline: 0
-    - _Version: 1024
+    - _Version: 1026
     - _VertexColorBlendDiffuse: 0
     - _VertexColorBlendEmissive: 0
     - _ZWrite: 1

@@ -19,7 +19,7 @@ struct v2g
         float3 lightColor3 : LIGHT_COLOR3;
     #endif
     #ifdef ARKTOON_REFRACTED
-        float4 projPos : TEXCOORD8;
+        noperspective float2 grabUV : TEXCOORD8;
     #endif
 };
 
@@ -60,8 +60,7 @@ v2g vert(appdata_full v) {
         #endif
     #endif
     #ifdef ARKTOON_REFRACTED
-        o.projPos = ComputeScreenPos (o.pos);
-        COMPUTE_EYEDEPTH(o.projPos.z);
+        o.grabUV = ComputeGrabScreenPos (o.pos).xy/o.pos.w;
     #endif
 
     return o;
@@ -91,7 +90,7 @@ struct VertexOutput {
         float4 ambientIndirect : AMBIENT_INDIRECT;
     #endif
     #ifdef ARKTOON_REFRACTED
-        float4 projPos : TEXCOORD8;
+        noperspective float2 grabUV : TEXCOORD8;
     #endif
 };
 
@@ -165,7 +164,7 @@ void geom(triangle v2g IN[3], inout TriangleStream<VertexOutput> tristream)
             #endif
 
             #ifdef ARKTOON_REFRACTED
-                o.projPos = IN[i].projPos;
+                o.grabUV = IN[i].grabUV;
             #endif
 
             #ifndef ARKTOON_ADD
@@ -218,7 +217,7 @@ void geom(triangle v2g IN[3], inout TriangleStream<VertexOutput> tristream)
             #endif
 
             #ifdef ARKTOON_REFRACTED
-                o.projPos = IN[iii].projPos;
+                o.grabUV = IN[iii].grabUV;
             #endif
 
             #ifndef ARKTOON_ADD
@@ -269,7 +268,7 @@ void geom(triangle v2g IN[3], inout TriangleStream<VertexOutput> tristream)
         #endif
 
         #ifdef ARKTOON_REFRACTED
-            o.projPos = IN[ii].projPos;
+            o.grabUV = IN[ii].grabUV;
         #endif
 
         #ifndef ARKTOON_ADD

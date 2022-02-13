@@ -219,7 +219,7 @@ Material:
     - _UseReflectionProbe: 1
     - _UseRim: 0
     - _UseVertexLight: 1
-    - _Version: 1024
+    - _Version: 1026
     - _VertexColorBlendDiffuse: 0
     - _VertexColorBlendEmissive: 0
     - _ZWrite: 1

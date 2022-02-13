@@ -3,7 +3,7 @@ float4 frag(VertexOutput i) : COLOR {
     i.normalDir = normalize(i.normalDir);
 
     float3x3 tangentTransform = float3x3( i.tangentDir, i.bitangentDir, i.normalDir * lerp(1, i.faceSign, _DoubleSidedFlipBackfaceNormal));
-    float3 viewDirection = normalize(_WorldSpaceCameraPos.xyz - i.posWorld.xyz);
+    float3 viewDirection = normalize(UnityWorldSpaceViewDir(i.posWorld.xyz));
     float3 _BumpMap_var = UnpackScaleNormal(tex2D(REF_BUMPMAP,TRANSFORM_TEX(i.uv0, REF_BUMPMAP)), REF_BUMPSCALE);
     float3 normalLocal = _BumpMap_var.rgb;
     float3 normalDirection = normalize(mul( normalLocal, tangentTransform )); // Perturbed normals
@@ -11,7 +11,7 @@ float4 frag(VertexOutput i) : COLOR {
     float3 lightDirection = normalize(lerp(_WorldSpaceLightPos0.xyz, _WorldSpaceLightPos0.xyz - i.posWorld.xyz,_WorldSpaceLightPos0.w));
     float3 lightColor = _LightColor0.rgb;
     float3 halfDirection = normalize(viewDirection+lightDirection);
-
+    float3 cameraSpaceViewDir = mul((float3x3)unity_WorldToCamera, viewDirection);
     UNITY_LIGHT_ATTENUATION(attenuation,i, i.posWorld.xyz);
     float4 _MainTex_var = UNITY_SAMPLE_TEX2D(REF_MAINTEX, TRANSFORM_TEX(i.uv0, REF_MAINTEX));
     float3 Diffuse = (_MainTex_var.rgb*REF_COLOR.rgb);
@@ -19,10 +19,10 @@ float4 frag(VertexOutput i) : COLOR {
 
     // アウトラインであればDiffuseとColorを混ぜる
     if (_OutlineUseColorShift) {
-        float3 Outline_Diff_HSV = CalculateHSV((Diffuse * _OutlineTextureColorRate + i.col * (1 - _OutlineTextureColorRate)), _OutlineHueShiftFromBase, _OutlineSaturationFromBase, _OutlineValueFromBase);
+        float3 Outline_Diff_HSV = CalculateHSV((Diffuse * _OutlineTextureColorRate + mad(i.col, - _OutlineTextureColorRate,i.col)), _OutlineHueShiftFromBase, _OutlineSaturationFromBase, _OutlineValueFromBase);
         Diffuse = lerp(Diffuse, Outline_Diff_HSV, i.isOutline);
     } else {
-        Diffuse = lerp(Diffuse, (Diffuse * _OutlineTextureColorRate + i.col * (1 - _OutlineTextureColorRate)), i.isOutline);
+        Diffuse = lerp(Diffuse, (Diffuse * _OutlineTextureColorRate + mad(i.col, - _OutlineTextureColorRate,i.col)), i.isOutline);
     }
 
     #ifdef ARKTOON_CUTOUT
@@ -37,13 +37,13 @@ float4 frag(VertexOutput i) : COLOR {
     #endif
 
     fixed _PointShadowborderBlur_var = UNITY_SAMPLE_TEX2D_SAMPLER(_PointShadowborderBlurMask, REF_MAINTEX, TRANSFORM_TEX(i.uv0, _PointShadowborderBlurMask)).r * _PointShadowborderBlur;
-    float ShadowborderMin = max(0, _PointShadowborder - _PointShadowborderBlur_var/2);
-    float ShadowborderMax = min(1, _PointShadowborder + _PointShadowborderBlur_var/2);
+    float ShadowborderMin = saturate( -_PointShadowborderBlur_var*0.5 +_PointShadowborder);
+    float ShadowborderMax = saturate( _PointShadowborderBlur_var * 0.5 + _PointShadowborder);
 
     float lightContribution = dot(lightDirection, normalDirection)*attenuation;
     float directContribution = 1.0 - ((1.0 - saturate(( (saturate(lightContribution) - ShadowborderMin)) / (ShadowborderMax - ShadowborderMin))));
     // #ifdef USE_POINT_SHADOW_STEPS
-        directContribution = lerp(directContribution, min(1,floor(directContribution * _PointShadowSteps) / (_PointShadowSteps - 1)), _PointShadowUseStep);
+        directContribution = lerp(directContribution, saturate(floor(directContribution * _PointShadowSteps) / (_PointShadowSteps - 1)), _PointShadowUseStep);
     // #endif
 
     // 光の受光に関する更なる補正
@@ -55,13 +55,14 @@ float4 frag(VertexOutput i) : COLOR {
     if (_ShadowCapBlendMode == 2) { // Light Shutter
         float3 normalDirectionShadowCap = normalize(mul( float3(normalLocal.r*_ShadowCapNormalMix,normalLocal.g*_ShadowCapNormalMix,normalLocal.b), tangentTransform )); // Perturbed normals
         float2 transformShadowCap = float2(0,0);
+        //ここだけ他のComputeTransformCapと式が違った
         if (_UsePositionRelatedCalc) {
-            float3 transformShadowCapViewDir = mul( UNITY_MATRIX_V, float4(viewDirection,0) ).xyz * float3(-1,-1,1) + float3(0,0,1);
-            float3 transformShadowCapNormal = mul( UNITY_MATRIX_V, float4(normalDirectionShadowCap,0) ).xyz * float3(-1,-1,1);
-            float3 transformShadowCapCombined = transformShadowCapViewDir * dot(transformShadowCapViewDir, transformShadowCapNormal) / transformShadowCapViewDir.z - transformShadowCapNormal;
+            float3 transformShadowCapViewDir = cameraSpaceViewDir  - float3(0,0,1);
+            float3 transformShadowCapNormal = mul((float3x3)unity_WorldToCamera, normalDirectionShadowCap);
+            float3 transformShadowCapCombined = transformShadowCapViewDir * (dot(transformShadowCapViewDir, transformShadowCapNormal) / transformShadowCapViewDir.z) + transformShadowCapNormal;
             transformShadowCap = ((transformShadowCapCombined.rg*0.5)+0.5);
         } else {
-            transformShadowCap = (mul( UNITY_MATRIX_V, float4(normalDirectionShadowCap,0) ).xyz.rg*0.5+0.5);
+            transformShadowCap = (mul((float3x3)unity_WorldToCamera, normalDirectionShadowCap).rg*0.5+0.5);
         }
         float4 _ShadowCapTexture_var = UNITY_SAMPLE_TEX2D_SAMPLER(_ShadowCapTexture, REF_MAINTEX, TRANSFORM_TEX(transformShadowCap, _ShadowCapTexture));
         float4 _ShadowCapBlendMask_var = UNITY_SAMPLE_TEX2D_SAMPLER(_ShadowCapBlendMask, REF_MAINTEX, TRANSFORM_TEX(i.uv0, _ShadowCapBlendMask));
@@ -121,17 +122,7 @@ float4 frag(VertexOutput i) : COLOR {
         // オプション:ShadeCap
         if (_ShadowCapBlendMode < 2) {
             float3 normalDirectionShadowCap = normalize(mul( float3(normalLocal.r*_ShadowCapNormalMix,normalLocal.g*_ShadowCapNormalMix,normalLocal.b), tangentTransform )); // Perturbed normals
-            float2 transformShadowCap = float2(0,0);
-            if (_UsePositionRelatedCalc) {
-                float3 transformShadowCapViewDir = mul( UNITY_MATRIX_V, float4(viewDirection,0) ).xyz * float3(-1,-1,1) + float3(0,0,1);
-                float3 transformShadowCapNormal = mul( UNITY_MATRIX_V, float4(normalDirectionShadowCap,0) ).xyz;
-                float2 transformShadowCap_old = transformShadowCapNormal.rg*0.5+0.5;
-                transformShadowCapNormal  *= float3(-1,-1,1);
-                float3 transformShadowCapCombined = transformShadowCapViewDir * dot(transformShadowCapViewDir, transformShadowCapNormal) / transformShadowCapViewDir.z - transformShadowCapNormal;
-                transformShadowCap = lerp(((transformShadowCapCombined.rg*0.5)+0.5), transformShadowCap_old, max(0,transformShadowCapNormal.z));
-            } else {
-                transformShadowCap = (mul( UNITY_MATRIX_V, float4(normalDirectionShadowCap,0) ).xyz.rg*0.5+0.5);
-            }
+            float2 transformShadowCap = ComputeTransformCap(cameraSpaceViewDir,normalDirectionShadowCap);
             float4 _ShadowCapTexture_var =  UNITY_SAMPLE_TEX2D_SAMPLER(_ShadowCapTexture, REF_MAINTEX, TRANSFORM_TEX(transformShadowCap, _ShadowCapTexture));
             float4 _ShadowCapBlendMask_var = UNITY_SAMPLE_TEX2D_SAMPLER(_ShadowCapBlendMask, REF_MAINTEX, TRANSFORM_TEX(i.uv0, _ShadowCapBlendMask));
             shadowcap = (1.0 - ((1.0 - (_ShadowCapTexture_var.rgb))*_ShadowCapBlendMask_var.rgb)*_ShadowCapBlend);
@@ -140,17 +131,7 @@ float4 frag(VertexOutput i) : COLOR {
         // オプション：MatCap
         if (_MatcapBlendMode < 3) {
             float3 normalDirectionMatcap = normalize(mul( float3(normalLocal.r*_MatcapNormalMix,normalLocal.g*_MatcapNormalMix,normalLocal.b), tangentTransform )); // Perturbed normals
-            float2 transformMatcap = float2(0,0);
-            if (_UsePositionRelatedCalc) {
-                float3 transformMatcapViewDir = mul( UNITY_MATRIX_V, float4(viewDirection,0) ).xyz * float3(-1,-1,1) + float3(0,0,1);
-                float3 transformMatcapNormal = mul( UNITY_MATRIX_V, float4(normalDirectionMatcap,0) ).xyz;
-                float2 transformMatcap_old = transformMatcapNormal.rg*0.5+0.5;
-                transformMatcapNormal *= float3(-1,-1,1);
-                float3 transformMatcapCombined = transformMatcapViewDir * dot(transformMatcapViewDir, transformMatcapNormal) / transformMatcapViewDir.z - transformMatcapNormal;
-                transformMatcap = lerp(((transformMatcapCombined.rg*0.5)+0.5), transformMatcap_old, max(0,transformMatcapNormal.z));
-            } else {
-                transformMatcap = (mul( UNITY_MATRIX_V, float4(normalDirectionMatcap,0) ).xyz.rg*0.5+0.5);
-            }
+            float2 transformMatcap = ComputeTransformCap(cameraSpaceViewDir,normalDirectionMatcap);
             float4 _MatcapTexture_var = UNITY_SAMPLE_TEX2D_SAMPLER(_MatcapTexture, REF_MAINTEX, TRANSFORM_TEX(transformMatcap, _MatcapTexture));
             float4 _MatcapBlendMask_var = UNITY_SAMPLE_TEX2D_SAMPLER(_MatcapBlendMask, REF_MAINTEX, TRANSFORM_TEX(i.uv0, _MatcapBlendMask));
             float3 matcapResult = ((_MatcapColor.rgb*_MatcapTexture_var.rgb)*_MatcapBlendMask_var.rgb*_MatcapBlend);
@@ -164,7 +145,7 @@ float4 frag(VertexOutput i) : COLOR {
             RimLight = (
                 lerp( _RimTexture_var.rgb, Diffuse, _RimUseBaseTexture )
                 * pow(
-                    min(1.0, 1.0 - max(0, dot(normalDirection, viewDirection)) + _RimUpperSideWidth)
+                    saturate(1.0 - saturate(dot(normalDirection, viewDirection)) + _RimUpperSideWidth)
                     , _RimFresnelPower
                 )
                 * _RimBlend
